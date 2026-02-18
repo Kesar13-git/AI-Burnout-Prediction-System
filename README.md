@@ -2,6 +2,10 @@
 
 This project predicts student burnout risk and academic performance using Machine Learning and Explainable AI.
 
+# 🚀 Live Demo:  
+
+👉 https://ai-burnout-prediction-system-d5mndrdnitgpufzx9muc5y.streamlit.app
+
 ## 🚀 Features
 
 - Burnout Classification (Low / Medium / High)
@@ -29,8 +33,6 @@ This project predicts student burnout risk and academic performance using Machin
 ## 🌐 Deployment
 
 Deployed using Streamlit Cloud.
-
----
 
 Developed as an AI-driven educational analytics system.
 
