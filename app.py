@@ -1,61 +1,79 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
-import joblib
+import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestRegressor
 from gtts import gTTS
+import io
 
-# -------------------------
-# PAGE CONFIG
-# -------------------------
-st.set_page_config(page_title="AI Burnout Intelligence System", layout="wide")
+st.set_page_config(page_title="AI Cognitive Burnout System", layout="wide")
 
-# -------------------------
-# PREMIUM STYLING
-# -------------------------
-st.markdown("""
-<style>
-.main {
-    background: linear-gradient(135deg, #0F2027, #203A43, #2C5364);
-}
-.big-title {
-    font-size:42px !important;
-    font-weight:800;
-    color:white;
-}
-.subtitle {
-    font-size:18px;
-    color:#DDDDDD;
-}
-.card {
-    background-color: rgba(255,255,255,0.05);
-    padding:25px;
-    border-radius:15px;
-    box-shadow: 0px 4px 20px rgba(0,0,0,0.4);
-}
-</style>
-""", unsafe_allow_html=True)
+# --------------------------
+# LOAD DATA
+# --------------------------
+@st.cache_data
+def load_data():
+    df = pd.read_csv("AI_Cognitive_Burnout_Dataset_8000_Rows.csv")
+    return df
 
-# -------------------------
-# LOAD MODELS
-# -------------------------
-classifier = joblib.load("burnout_classifier.pkl")
-regressor = joblib.load("performance_regressor.pkl")
-scaler_class = joblib.load("scaler_classification.pkl")
-scaler_reg = joblib.load("scaler_regression.pkl")
+df = load_data()
 
-# -------------------------
-# HEADER
-# -------------------------
-st.markdown('<p class="big-title">🧠 AI Cognitive Burnout Intelligence System</p>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Real-Time Burnout Risk Prediction with Explainable AI</p>', unsafe_allow_html=True)
-st.divider()
+# --------------------------
+# FEATURES
+# --------------------------
+features = [
+    "Study_Hours",
+    "Sleep_Hours",
+    "Screen_Time_Hours",
+    "Exercise_Hours",
+    "Stress_Level",
+    "Previous_Marks"
+]
 
-# -------------------------
-# SIDEBAR INPUT
-# -------------------------
-st.sidebar.header("📥 Student Lifestyle Input")
+X = df[features]
+y_class = df["Burnout_Level"]
+y_reg = df["Final_Predicted_Marks"]
+
+# Encode burnout labels
+le = LabelEncoder()
+y_class_encoded = le.fit_transform(y_class)
+
+# Train/Test split
+X_train, X_test, y_train_c, y_test_c = train_test_split(
+    X, y_class_encoded, test_size=0.2, random_state=42
+)
+
+X_train_r, X_test_r, y_train_r, y_test_r = train_test_split(
+    X, y_reg, test_size=0.2, random_state=42
+)
+
+# Scale classification features
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+
+# --------------------------
+# TRAIN MODELS (Lightweight)
+# --------------------------
+classifier = LogisticRegression(max_iter=1000)
+classifier.fit(X_train_scaled, y_train_c)
+
+regressor = RandomForestRegressor(
+    n_estimators=100,
+    max_depth=10,
+    random_state=42
+)
+regressor.fit(X_train_r, y_train_r)
+
+# --------------------------
+# UI
+# --------------------------
+st.title("🧠 AI Cognitive Burnout Intelligence System")
+st.markdown("### Predict Burnout Risk & Academic Performance")
+
+st.sidebar.header("📥 Student Input")
 
 study = st.sidebar.slider("Study Hours", 0.0, 12.0, 5.0)
 sleep = st.sidebar.slider("Sleep Hours", 3.0, 10.0, 7.0)
@@ -64,66 +82,40 @@ exercise = st.sidebar.slider("Exercise Hours", 0.0, 4.0, 1.0)
 stress = st.sidebar.slider("Stress Level (1-10)", 1, 10, 5)
 previous = st.sidebar.slider("Previous Marks", 35.0, 100.0, 70.0)
 
-# -------------------------
-# RUN ANALYSIS BUTTON
-# -------------------------
 if st.sidebar.button("🚀 Run AI Analysis"):
 
     input_data = np.array([[study, sleep, screen, exercise, stress, previous]])
+    input_scaled = scaler.transform(input_data)
 
-    input_scaled_c = scaler_class.transform(input_data)
-    input_scaled_r = scaler_reg.transform(input_data)
+    burnout_pred = classifier.predict(input_scaled)[0]
+    burnout_prob = classifier.predict_proba(input_scaled)[0]
+    predicted_marks = regressor.predict(input_data)[0]
 
-    burnout_pred = classifier.predict(input_scaled_c)[0]
-    burnout_prob = classifier.predict_proba(input_scaled_c)[0]
-    predicted_marks = regressor.predict(input_scaled_r)[0]
-
-    class_labels = ["High", "Low", "Medium"]
-    burnout_label = class_labels[burnout_pred]
-    risk_score = burnout_prob[0] * 100
-
-    # STORE IN SESSION STATE
-    st.session_state["burnout_label"] = burnout_label
-    st.session_state["predicted_marks"] = round(predicted_marks, 2)
-    st.session_state["burnout_prob"] = burnout_prob
-    st.session_state["risk_score"] = risk_score
-
-# -------------------------
-# DISPLAY RESULTS IF AVAILABLE
-# -------------------------
-if "burnout_label" in st.session_state:
-
-    burnout_label = st.session_state["burnout_label"]
-    predicted_marks = st.session_state["predicted_marks"]
-    burnout_prob = st.session_state["burnout_prob"]
-    risk_score = st.session_state["risk_score"]
+    burnout_label = le.inverse_transform([burnout_pred])[0]
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("🔥 Burnout Risk Level")
-        st.write(f"### {burnout_label}")
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.subheader("🔥 Burnout Level")
+        st.success(burnout_label)
 
     with col2:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("📊 Predicted Final Marks")
-        st.write(f"### {predicted_marks}")
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.info(round(predicted_marks, 2))
 
     st.divider()
 
-    # -------------------------
-    # RISK GAUGE
-    # -------------------------
+    # --------------------------
+    # GAUGE CHART
+    # --------------------------
+    risk_score = max(burnout_prob) * 100
+
     gauge = go.Figure(go.Indicator(
         mode="gauge+number",
         value=risk_score,
         title={'text': "Burnout Risk Score (%)"},
         gauge={
             'axis': {'range': [0, 100]},
-            'bar': {'color': "red"},
             'steps': [
                 {'range': [0, 40], 'color': "green"},
                 {'range': [40, 70], 'color': "yellow"},
@@ -131,25 +123,28 @@ if "burnout_label" in st.session_state:
             ],
         }
     ))
+
     st.plotly_chart(gauge, use_container_width=True)
 
-    # -------------------------
+    # --------------------------
     # PROBABILITY BAR CHART
-    # -------------------------
-    prob_df = pd.DataFrame({
-        "Burnout Level": ["High", "Low", "Medium"],
-        "Probability": burnout_prob
-    })
+    # --------------------------
+    st.subheader("📊 Burnout Probability Distribution")
 
-    prob_fig = px.bar(prob_df, x="Burnout Level", y="Probability",
-                      color="Burnout Level",
-                      title="Burnout Probability Distribution")
+    prob_fig = go.Figure(data=[
+        go.Bar(
+            x=le.classes_,
+            y=burnout_prob
+        )
+    ])
 
     st.plotly_chart(prob_fig, use_container_width=True)
 
-    # -------------------------
-    # LIFESTYLE RADAR
-    # -------------------------
+    # --------------------------
+    # RADAR CHART
+    # --------------------------
+    st.subheader("🧭 Lifestyle Radar Analysis")
+
     radar_fig = go.Figure()
 
     radar_fig.add_trace(go.Scatterpolar(
@@ -160,61 +155,63 @@ if "burnout_label" in st.session_state:
 
     radar_fig.update_layout(
         polar=dict(radialaxis=dict(visible=True)),
-        showlegend=False,
-        title="Lifestyle Pattern Radar"
+        showlegend=False
     )
 
     st.plotly_chart(radar_fig, use_container_width=True)
 
-    st.divider()
+    # --------------------------
+    # FEATURE IMPORTANCE
+    # --------------------------
+    st.subheader("📈 Feature Importance (Regression Model)")
 
-    # -------------------------
+    importance = regressor.feature_importances_
+
+    importance_fig = go.Figure(data=[
+        go.Bar(
+            x=features,
+            y=importance
+        )
+    ])
+
+    st.plotly_chart(importance_fig, use_container_width=True)
+
+    # --------------------------
     # RECOMMENDATIONS
-    # -------------------------
-    st.subheader("💡 AI Recommendations")
+    # --------------------------
+    st.subheader("💡 Recommendations")
 
     recommendations = []
 
     if sleep < 6:
-        recommendations.append("💤 Increase sleep to 7–8 hours.")
+        recommendations.append("Increase sleep to 7–8 hours.")
     if stress > 7:
-        recommendations.append("🧘 Practice stress management techniques.")
+        recommendations.append("Practice stress reduction techniques.")
     if screen > 7:
-        recommendations.append("📵 Reduce screen exposure.")
+        recommendations.append("Reduce screen exposure.")
     if exercise < 0.5:
-        recommendations.append("🏃 Include daily physical activity.")
-    if burnout_label == "High":
-        recommendations.append("📚 Consider academic recovery planning.")
+        recommendations.append("Include daily physical activity.")
 
     if recommendations:
         for rec in recommendations:
-            st.success(rec)
+            st.warning(rec)
     else:
-        st.success("✔ Lifestyle appears balanced.")
+        st.success("Lifestyle appears balanced.")
 
-    st.divider()
+    # --------------------------
+    # VOICE ASSISTANT
+    # --------------------------
+    summary = f"""
+    Burnout level is {burnout_label}.
+    Predicted final marks are {round(predicted_marks,2)}.
+    Burnout risk score is {round(risk_score,1)} percent.
+    """
 
-    # -------------------------
-    # VOICE BUTTON
-    # -------------------------
-    if st.button("🔊 Speak AI Summary"):
-
-        summary_text = f"""
-        Burnout level is {burnout_label}.
-        Predicted final marks are {predicted_marks}.
-        Please follow the recommendations shown on the screen.
-        """
-
-        tts = gTTS(summary_text)
-        tts.save("voice.mp3")
-
-        with open("voice.mp3", "rb") as audio_file:
-            audio_bytes = audio_file.read()
-
-        st.audio(audio_bytes, format="audio/mp3")
-
-else:
-    st.info("👈 Please enter inputs and click 'Run AI Analysis' to see results.")
-
-st.markdown("---")
-st.markdown("Built with Machine Learning + Explainable AI + Interactive Visualization")
+    try:
+        tts = gTTS(summary)
+        audio_bytes = io.BytesIO()
+        tts.write_to_fp(audio_bytes)
+        st.subheader("🔊 AI Voice Summary")
+        st.audio(audio_bytes)
+    except:
+        st.info("Voice assistant not available in cloud environment.")
